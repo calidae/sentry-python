@@ -19,7 +19,7 @@ class BeamIntegration(Integration):
     @staticmethod
     def setup_once():
         # type: () -> None
-        from beam.transforms.core import ParDo  # type: ignore
+        from apache_beam.transforms.core import ParDo  # type: ignore
 
         old_init = ParDo.__init__
 
@@ -29,7 +29,7 @@ class BeamIntegration(Integration):
                 # Need to patch both methods because older celery sometimes
                 # short-circuits to task.run if it thinks it's safe.
 
-                self.fn.process = _wrap_task_call(self.fn, self.fn.process)
+                self.fn.process = _wrap_task_call(self.fn, self.fn.process, Hub.current.client)
 
                 # `build_tracer` is apparently called for every task
                 # invocation. Can't wrap every celery task for every invocation
@@ -41,38 +41,7 @@ class BeamIntegration(Integration):
         ParDo.__init__ = sentry_init_pardo
 
 
-def _wrap_tracer(task, f):
-    # Need to wrap tracer for pushing the scope before prerun is sent, and
-    # popping it after postrun is sent.
-    #
-    # This is the reason we don't use signals for hooking in the first place.
-    # Also because in Celery 3, signal dispatch returns early if one handler
-    # crashes.
-    def _inner(*args, **kwargs):
-        hub = Hub.current
-        if hub.get_integration(CeleryIntegration) is None:
-            return f(*args, **kwargs)
-
-        with hub.push_scope() as scope:
-            scope._name = "celery"
-            scope.clear_breadcrumbs()
-            scope.add_event_processor(_make_event_processor(task, *args, **kwargs))
-
-            span = Span.continue_from_headers(args[3].get("headers") or {})
-            span.transaction = "unknown celery task"
-
-            with capture_internal_exceptions():
-                # Celery task objects are not a thing to be trusted. Even
-                # something such as attribute access can fail.
-                span.transaction = task.name
-
-            with hub.span(span):
-                return f(*args, **kwargs)
-
-    return _inner
-
-
-def _wrap_task_call(task, f):
+def _wrap_task_call(task, f, client):
     # Need to wrap task call because the exception is caught before we get to
     # see it. Also celery's reported stacktrace is untrustworthy.
     def _inner(*args, **kwargs):
@@ -86,34 +55,9 @@ def _wrap_task_call(task, f):
 
     return _inner
 
-
-def _make_event_processor(task, uuid, args, kwargs, request=None):
-    def event_processor(event, hint):
-        with capture_internal_exceptions():
-            extra = event.setdefault("extra", {})
-            extra["celery-job"] = {
-                "task_name": task.name,
-                "args": args,
-                "kwargs": kwargs,
-            }
-
-        if "exc_info" in hint:
-            with capture_internal_exceptions():
-                if issubclass(hint["exc_info"][0], SoftTimeLimitExceeded):
-                    event["fingerprint"] = [
-                        "celery",
-                        "SoftTimeLimitExceeded",
-                        getattr(task, "name", task),
-                    ]
-
-        return event
-
-    return event_processor
-
-
-def _capture_exception(task, exc_info):
+def _capture_exception(task, exc_info, client):
     hub = Hub.current
-
+    hub.bind_client(client)
     if hub.get_integration(BeamIntegration) is None:
         return
     if hasattr(task, "throws") and isinstance(exc_info[1], task.throws):
@@ -125,7 +69,8 @@ def _capture_exception(task, exc_info):
         mechanism={"type": "beam", "handled": False},
     )
 
-    hub.capture_event(event, hint=hint)
+    if hub.capture_event(event, hint=hint) is None:
+        print("NOOOOOO")
 
 
 def _patch_worker_exit():
