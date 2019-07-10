@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 
 import sys
+import logging
 
 from sentry_sdk.hub import Hub
 from sentry_sdk.utils import capture_internal_exceptions, event_from_exception
@@ -54,6 +55,7 @@ def _capture_exception(task, exc_info):
     integration = hub.get_integration(BeamIntegration)
 
     if integration is not None:
+        logging.info("Found integration, testing out client!")
         client = hub.client
         with capture_internal_exceptions():
             event, hint = event_from_exception(
