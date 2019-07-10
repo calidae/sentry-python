@@ -38,6 +38,7 @@ class BeamIntegration(Integration):
             
 
         ParDo.__init__ = sentry_init_pardo
+        ignore_logger("root")
 
 
 def _wrap_task_call(task, f):
@@ -57,8 +58,6 @@ def _capture_exception(task, exc_info, client_dsn):
     client = Client(dsn=client_dsn)
     hub.bind_client(client)
 
-    logging.info("Found integration, testing out client!")
-    client = hub.client
     with capture_internal_exceptions():
         event, hint = event_from_exception(
             exc_info,
