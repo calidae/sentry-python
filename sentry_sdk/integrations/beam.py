@@ -56,18 +56,16 @@ def _capture_exception(task, exc_info, client_dsn):
     hub = Hub.current
     client = Client(dsn=client_dsn)
     hub.bind_client(client)
-    integration = hub.get_integration(BeamIntegration)
 
-    if integration is not None:
-        logging.info("Found integration, testing out client!")
-        client = hub.client
-        with capture_internal_exceptions():
-            event, hint = event_from_exception(
-                exc_info,
-                client_options=client.options,
-                mechanism={"type": "beam", "handled": False},
-            )
+    logging.info("Found integration, testing out client!")
+    client = hub.client
+    with capture_internal_exceptions():
+        event, hint = event_from_exception(
+            exc_info,
+            client_options=client.options,
+            mechanism={"type": "beam", "handled": False},
+        )
 
-            hub.capture_event(event, hint=hint)
+        hub.capture_event(event, hint=hint)
 
 
