@@ -44,25 +44,24 @@ def _wrap_task_call(task, f):
             return f(*args, **kwargs)
         except Exception:
             exc_info = sys.exc_info()
-            with capture_internal_exceptions():
-                _capture_exception(task, exc_info)
+            _capture_exception(task, exc_info)
             reraise(*exc_info)
 
     return _inner
 
 def _capture_exception(task, exc_info):
     hub = Hub.current
+    integration = hub.get_integration(BeamIntegration)
 
-    if hub.get_integration(BeamIntegration) is None:
-        return
-    if hasattr(task, "throws") and isinstance(exc_info[1], task.throws):
-        return
+    if integration is not None:
+        client = hub.client
+        with capture_internal_exceptions():
+            event, hint = event_from_exception(
+                exc_info,
+                client_options=client.options,
+                mechanism={"type": "beam", "handled": False},
+            )
 
-    event, hint = event_from_exception(
-        exc_info,
-        client_options=hub.client.options,
-        mechanism={"type": "beam", "handled": False},
-    )
+            hub.capture_event(event, hint=hint)
 
-    hub.capture_event(event, hint=hint)
 
