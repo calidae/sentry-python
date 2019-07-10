@@ -27,7 +27,7 @@ class BeamIntegration(Integration):
 
         def sentry_init_pardo(self, *args, **kwargs):
             old_init(self, *args, **kwargs)
-            self.fn.client = None#Hub.current.client
+
             if not getattr(self, "_sentry_is_patched", False):
 
                 self.fn.process = _wrap_task_call(self.fn, self.fn.process)
@@ -44,6 +44,7 @@ class BeamIntegration(Integration):
 def _wrap_task_call(task, f):
     client_dsn = Hub.current.client.dsn
     def _inner(*args, **kwargs):
+        ignore_logger("root")
         try:
             return f(*args, **kwargs)
         except Exception:
