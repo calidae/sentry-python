@@ -64,6 +64,5 @@ def _capture_exception(task, exc_info, client):
         mechanism={"type": "beam", "handled": False},
     )
 
-    if hub.capture_event(event, hint=hint) is None:
-        print("NOOOOOO")
+    hub.capture_event(event, hint=hint)
 
