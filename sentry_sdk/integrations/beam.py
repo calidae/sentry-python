@@ -29,7 +29,7 @@ class BeamIntegration(Integration):
                 # Need to patch both methods because older celery sometimes
                 # short-circuits to task.run if it thinks it's safe.
 
-                self.fn.process = _wrap_task_call(self.fn, self.fn.process, Hub.current.client)
+                self.fn.process = _wrap_task_call(self.fn, self.fn.process)
 
                 # `build_tracer` is apparently called for every task
                 # invocation. Can't wrap every celery task for every invocation
@@ -41,23 +41,27 @@ class BeamIntegration(Integration):
         ParDo.__init__ = sentry_init_pardo
 
 
-def _wrap_task_call(task, f, client):
+def _wrap_task_call(task, f):
     # Need to wrap task call because the exception is caught before we get to
     # see it. Also celery's reported stacktrace is untrustworthy.
+    client =  Hub.current.client
     def _inner(*args, **kwargs):
-        try:
-            return f(*args, **kwargs)
-        except Exception:
-            exc_info = sys.exc_info()
-            with capture_internal_exceptions():
-                _capture_exception(task, exc_info)
-            reraise(*exc_info)
+        exc_info = sys.exc_info()
+        _capture_exception(task, exc_info, client)
+        # try:
+        #     return f(*args, **kwargs)
+        # except Exception:
+        #     exc_info = sys.exc_info()
+        #     with capture_internal_exceptions():
+        #         _capture_exception(task, exc_info)
+        #     reraise(*exc_info)
 
     return _inner
 
 def _capture_exception(task, exc_info, client):
     hub = Hub.current
-    hub.bind_client(client)
+    raise Exception
+    # hub.bind_client(client)
     if hub.get_integration(BeamIntegration) is None:
         return
     if hasattr(task, "throws") and isinstance(exc_info[1], task.throws):
