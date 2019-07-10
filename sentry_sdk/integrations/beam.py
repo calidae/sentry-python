@@ -25,6 +25,7 @@ class BeamIntegration(Integration):
 
         def sentry_init_pardo(self, *args, **kwargs):
             old_init(self, *args, **kwargs)
+            self.fn.client = None#Hub.current.client
             if not getattr(self, "_sentry_is_patched", False):
 
                 self.fn.process = _wrap_task_call(self.fn, self.fn.process)
@@ -38,21 +39,20 @@ class BeamIntegration(Integration):
 
 
 def _wrap_task_call(task, f):
-    client =  Hub.current.client
     def _inner(*args, **kwargs):
         try:
             return f(*args, **kwargs)
         except Exception:
             exc_info = sys.exc_info()
             with capture_internal_exceptions():
-                _capture_exception(task, exc_info, client)
+                _capture_exception(task, exc_info)
             reraise(*exc_info)
 
     return _inner
 
-def _capture_exception(task, exc_info, client):
+def _capture_exception(task, exc_info):
     hub = Hub.current
-    hub.bind_client(client)
+
     if hub.get_integration(BeamIntegration) is None:
         return
     if hasattr(task, "throws") and isinstance(exc_info[1], task.throws):
