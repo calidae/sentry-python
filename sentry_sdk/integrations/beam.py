@@ -4,6 +4,7 @@ import sys
 import logging
 
 from sentry_sdk.hub import Hub
+from sentry_sdk.client import Client
 from sentry_sdk.utils import capture_internal_exceptions, event_from_exception
 from sentry_sdk.tracing import Span
 from sentry_sdk._compat import reraise
@@ -40,18 +41,21 @@ class BeamIntegration(Integration):
 
 
 def _wrap_task_call(task, f):
+    client_dsn = Hub.current.client.dsn
     def _inner(*args, **kwargs):
         try:
             return f(*args, **kwargs)
         except Exception:
             exc_info = sys.exc_info()
-            _capture_exception(task, exc_info)
+            _capture_exception(task, exc_info, client_dsn)
             reraise(*exc_info)
 
     return _inner
 
-def _capture_exception(task, exc_info):
+def _capture_exception(task, exc_info, client_dsn):
     hub = Hub.current
+    client = Client(dsn=client_dsn)
+    hub.bind_client(client)
     integration = hub.get_integration(BeamIntegration)
 
     if integration is not None:
