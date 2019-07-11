@@ -21,7 +21,7 @@ class BeamIntegration(Integration):
     @staticmethod
     def setup_once():
         # type: () -> None
-        from apache_beam.transforms.core import ParDo  # type: ignore
+        from apache_beam.transforms.core import ParDo, WindowInto  # type: ignore
 
         old_init = ParDo.__init__
 
@@ -30,8 +30,9 @@ class BeamIntegration(Integration):
 
             if not getattr(self, "_sentry_is_patched", False):
 
-                self.fn.process = _wrap_task_call(self.fn, self.fn.process)
+                self.fn.process = _wrap_task_call(self.fn.process)
 
+                WindowInto.WindowIntoFn.process = _wrap_task_call(WindowInto.WindowIntoFn.process)
 
                 self._sentry_is_patched = True
 
@@ -42,19 +43,19 @@ class BeamIntegration(Integration):
         ignore_logger("bundle_processor.create")
 
 
-def _wrap_task_call(task, f):
+def _wrap_task_call(f):
     client_dsn = Hub.current.client.dsn
     def _inner(*args, **kwargs):
         try:
             return f(*args, **kwargs)
         except Exception:
             exc_info = sys.exc_info()
-            _capture_exception(task, exc_info, client_dsn)
+            _capture_exception(exc_info, client_dsn)
             reraise(*exc_info)
 
     return _inner
 
-def _capture_exception(task, exc_info, client_dsn):
+def _capture_exception(exc_info, client_dsn):
     hub = Hub.current
     client = Client(dsn=client_dsn)
     hub.bind_client(client)
