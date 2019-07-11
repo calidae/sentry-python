@@ -31,14 +31,13 @@ class BeamIntegration(Integration):
             if not getattr(self, "_sentry_is_patched", False):
 
                 self.fn.process = _wrap_task_call(self.fn.process)
-
-                WindowInto.WindowIntoFn.process = _wrap_task_call(WindowInto.WindowIntoFn.process)
-
                 self._sentry_is_patched = True
 
             
 
         ParDo.__init__ = sentry_init_pardo
+        old_process = WindowInto.WindowIntoFn.process
+        WindowInto.WindowIntoFn.process = _wrap_task_call(old_process)
         ignore_logger("root")
         ignore_logger("bundle_processor.create")
 
