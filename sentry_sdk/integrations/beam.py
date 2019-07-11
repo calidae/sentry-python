@@ -58,6 +58,8 @@ def _capture_exception(task, exc_info, client_dsn):
     hub = Hub.current
     client = Client(dsn=client_dsn)
     hub.bind_client(client)
+    ignore_logger("root")
+    ignore_logger("bundle_processor.create")
 
     with capture_internal_exceptions():
         event, hint = event_from_exception(
