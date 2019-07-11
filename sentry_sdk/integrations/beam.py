@@ -39,12 +39,12 @@ class BeamIntegration(Integration):
 
         ParDo.__init__ = sentry_init_pardo
         ignore_logger("root")
+        ignore_logger("bundle_processor.create")
 
 
 def _wrap_task_call(task, f):
     client_dsn = Hub.current.client.dsn
     def _inner(*args, **kwargs):
-        ignore_logger("root")
         try:
             return f(*args, **kwargs)
         except Exception:
