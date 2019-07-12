@@ -49,8 +49,6 @@ class BeamIntegration(Integration):
 
 
 def _wrap_task_call(f):
-    if not Hub or not Hub.current or not Hub.current.client or not Hub.current.client.dsn:
-        raise Exception("ugh")
     client_dsn = Hub.current.client.dsn
     def _inner(*args, **kwargs):
         try:
@@ -63,19 +61,24 @@ def _wrap_task_call(f):
     return _inner
 
 def _capture_exception(exc_info, client_dsn):
-    hub = Hub.current
-    client = Client(dsn=client_dsn)
-    hub.bind_client(client)
-    ignore_logger("root")
-    ignore_logger("bundle_processor.create")
+    try:
+        hub = Hub.current
+        client = Client(dsn=client_dsn)
+        hub.bind_client(client)
+        ignore_logger("root")
+        ignore_logger("bundle_processor.create")
 
-    with capture_internal_exceptions():
-        event, hint = event_from_exception(
-            exc_info,
-            client_options=client.options,
-            mechanism={"type": "beam", "handled": False},
-        )
+        with capture_internal_exceptions():
+            event, hint = event_from_exception(
+                exc_info,
+                client_options=client.options,
+                mechanism={"type": "beam", "handled": False},
+            )
 
-        hub.capture_event(event, hint=hint)
+            hub.capture_event(event, hint=hint)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise e
 
 
