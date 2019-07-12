@@ -49,7 +49,7 @@ class BeamIntegration(Integration):
 
 
 def _wrap_task_call(f):
-    if not Hub or not Hub.current or not Hub.current.client or not Hub.currenty.client.dsn:
+    if not Hub or not Hub.current or not Hub.current.client or not Hub.current.client.dsn:
         raise Exception("ugh")
     client_dsn = Hub.current.client.dsn
     def _inner(*args, **kwargs):
