@@ -21,18 +21,18 @@ class BeamIntegration(Integration):
     @staticmethod
     def setup_once():
         # type: () -> None
-        from apache_beam.transforms.core import ParDo, WindowInto  # type: ignore
 
         old_init = ParDo.__init__
 
         def sentry_init_pardo(self, *args, **kwargs):
+            from apache_beam.transforms.core import ParDo, WindowInto  # type: ignore
             old_init(self, *args, **kwargs)
 
             if not getattr(self, "_sentry_is_patched", False):
 
                 self.fn.process = _wrap_task_call(self.fn.process)
                 self._sentry_is_patched = True
-
+        # WindowInto.WindowIntoFn.process = _wrap_task_call(self.fn.process)
             
 
         ParDo.__init__ = sentry_init_pardo
@@ -54,12 +54,10 @@ def _wrap_task_call(f):
         try:
             return f(*args, **kwargs)
         except Exception:
-            try:
-                exc_info = sys.exc_info()
-                _capture_exception(exc_info, client_dsn)
-                reraise(*exc_info)
-            except Exception:
-                raise
+            exc_info = sys.exc_info()
+            _capture_exception(exc_info, client_dsn)
+            reraise(*exc_info)
+
 
     return _inner
 
