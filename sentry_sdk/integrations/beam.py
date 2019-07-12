@@ -61,24 +61,22 @@ def _wrap_task_call(f):
     return _inner
 
 def _capture_exception(exc_info, client_dsn):
-    try:
-        hub = Hub.current
-        client = Client(dsn=client_dsn)
-        hub.bind_client(client)
-        ignore_logger("root")
-        ignore_logger("bundle_processor.create")
+    if not Hub or not Hub.current:
+        raise Exception("Hub not valid")        
+    hub = Hub.current
+    client = Client(dsn=client_dsn)
+    hub.bind_client(client)
+    ignore_logger("root")
+    ignore_logger("bundle_processor.create")
 
-        with capture_internal_exceptions():
-            event, hint = event_from_exception(
-                exc_info,
-                client_options=client.options,
-                mechanism={"type": "beam", "handled": False},
-            )
+    with capture_internal_exceptions():
+        event, hint = event_from_exception(
+            exc_info,
+            client_options=client.options,
+            mechanism={"type": "beam", "handled": False},
+        )
 
-            hub.capture_event(event, hint=hint)
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        raise e
+        hub.capture_event(event, hint=hint)
+
 
 
