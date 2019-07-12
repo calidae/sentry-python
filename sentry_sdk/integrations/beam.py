@@ -54,15 +54,16 @@ def _wrap_task_call(f):
         try:
             return f(*args, **kwargs)
         except Exception:
-            exc_info = sys.exc_info()
-            _capture_exception(exc_info, client_dsn)
-            reraise(*exc_info)
+            try:
+                exc_info = sys.exc_info()
+                _capture_exception(exc_info, client_dsn)
+                reraise(*exc_info)
+            except Exception:
+                raise
 
     return _inner
 
-def _capture_exception(exc_info, client_dsn):    
-    if not client_dsn:
-        raise Exception("ugh")
+def _capture_exception(exc_info, client_dsn):
     hub = Hub.current
     client = Client(dsn=client_dsn)
     hub.bind_client(client)
