@@ -60,11 +60,11 @@ def _wrap_task_call(f):
 
     return _inner
 
-def _capture_exception(exc_info, client_dsn):
-    if not Hub or not Hub.current:
-        raise Exception("Hub not valid")        
+def _capture_exception(exc_info, client_dsn):     
     hub = Hub.current
     client = Client(dsn=client_dsn)
+    if not client:
+        raise Exception("Client not working")
     hub.bind_client(client)
     ignore_logger("root")
     ignore_logger("bundle_processor.create")
