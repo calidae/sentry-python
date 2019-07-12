@@ -36,19 +36,21 @@ class BeamIntegration(Integration):
             
 
         ParDo.__init__ = sentry_init_pardo
-        old_window_init = WindowInto.__init__
-        def sentry_init_window(self, *args, **kwargs):
-            if not getattr(self, "_sentry_is_patched", False):
-                self.WindowIntoFn.process = _wrap_task_call(self.WindowIntoFn.process)
-                self._sentry_is_patched = True
-            old_window_init(self, *args, **kwargs)
+        # old_window_init = WindowInto.__init__
+        # def sentry_init_window(self, *args, **kwargs):
+        #     if not getattr(self, "_sentry_is_patched", False):
+        #         self.WindowIntoFn.process = _wrap_task_call(self.WindowIntoFn.process)
+        #         self._sentry_is_patched = True
+        #     old_window_init(self, *args, **kwargs)
 
-        WindowInto.__init__ = sentry_init_window
+        # WindowInto.__init__ = sentry_init_window
         ignore_logger("root")
         ignore_logger("bundle_processor.create")
 
 
 def _wrap_task_call(f):
+    if not Hub or not Hub.current or not Hub.current.client or not Hub.currenty.client.dsn:
+        raise Exception("ugh")
     client_dsn = Hub.current.client.dsn
     def _inner(*args, **kwargs):
         try:
