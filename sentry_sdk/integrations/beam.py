@@ -22,6 +22,8 @@ class BeamIntegration(Integration):
     def setup_once():
         # type: () -> None
         from apache_beam.transforms.core import ParDo, WindowInto  # type: ignore
+        from apache_beam.typehints.decorators import getfullargspec
+        import decorator
 
         old_init = ParDo.__init__
 
@@ -29,8 +31,20 @@ class BeamIntegration(Integration):
             old_init(self, *args, **kwargs)
 
             if not getattr(self, "_sentry_is_patched", False):
+                @decorator.decorator
+                def decor(f, *args, **kwargs):
+                    try:
+                        return f(*args, **kwargs)
+                    except Exception:
+                        exc_info = sys.exc_info()
+                        _capture_exception(exc_info, client_dsn)
+                        reraise(*exc_info)
 
-                self.fn.process = _wrap_task_call(self.fn.process)
+                # self.fn.process = _wrap_task_call(self, self.fn.process)
+                original = self.fn.process
+                setattr(self.fn, "process", decor(getattr(self.fn, "process")))
+                # if (getfullargspec(self.fn.process)[3]):
+                # raise Exception(getfullargspec(original), getfullargspec(self.fn.process))
                 self._sentry_is_patched = True
         # WindowInto.WindowIntoFn.process = _wrap_task_call(WindowInto.WindowIntoFn.process)
             
@@ -109,7 +123,7 @@ class BeamIntegration(Integration):
 #     def __setstate_(self, data):
 #         self.__dict__.update(data)
 
-def _wrap_task_call(f):
+def _wrap_task_call(cls, f):
     client_dsn = Hub.current.client.dsn
     # from apache_beam.transforms.core import DoFn, _DoFnParam
     from apache_beam.typehints.decorators import getfullargspec
@@ -126,14 +140,7 @@ def _wrap_task_call(f):
     #         count = len(func_args)-len(default_args)+arg_idx
     #         kwargs[func_args[count]] = default_args[arg_idx]
 
-    @decorator.decorator
-    def decor(f, *args, **kwargs):
-        try:
-            return f(*args, **kwargs)
-        except Exception:
-            exc_info = sys.exc_info()
-            _capture_exception(exc_info, client_dsn)
-            reraise(*exc_info)
+
 
     # @decor
     def _inner(*args, **kwargs):
@@ -171,7 +178,7 @@ def _wrap_task_call(f):
     #     # raise(Exception(dir(f)))
     #     # _inner.__closure__[1].cell_contents.args = args
         _inner = decor(f)
-        print("OSMAR", getfullargspec(_inner).defaults)
+        setattr(cls, "f", decor(getattr(cls, "f").im_func))
     return _inner
 
 def _capture_exception(exc_info, client_dsn):
