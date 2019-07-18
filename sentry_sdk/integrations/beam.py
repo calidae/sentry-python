@@ -14,6 +14,7 @@ from sentry_sdk.integrations import Integration
 from sentry_sdk.integrations.logging import ignore_logger
 
 import inspect
+import types
 from inspect import getfullargspec
 
 
@@ -32,40 +33,17 @@ class BeamIntegration(Integration):
 
         old_init = ParDo.__init__
 
-        def sentry_init_pardo(self, *args, **kwargs):
-            old_init(self, *args, **kwargs)
+        def sentry_init_pardo(self, fn, *args, **kwargs):
 
             if not getattr(self, "_sentry_is_patched", False):
                 
-                # get_function_arguments = _wrap_args_pec(getfullargspec, self.fn.process)
-                # # getfullargspec = foo
-                # original = self.fn.process
-                self.fn.process = _wrap_task_call(self.fn, self.fn.process)
-                # self.fn.process.__defaults__ = original.__defaults__
-                # if (getfullargspec(original)[3]):
-                #     raise Exception(get_function_arguments(self.fn, "process"), getfullargspec(original))
-                # client_dsn = Hub.current.client.dsn
-                # original = self.fn.process
+                fn.process = _wrap_task_call(fn, fn.process)
 
-                # setattr(self.fn, "process", call_with_args(self.fn, self.fn.process, _call_))
-
-
-                # raise Exception(getfullargspec(self.fn.process))
-                # if (getfullargspec(self.fn.process)[3]):
-                # raise Exception(getfullargspec(original), getfullargspec(self.fn.process))
                 self._sentry_is_patched = True
-        # WindowInto.WindowIntoFn.process = _wrap_task_call(WindowInto.WindowIntoFn.process)
-            
+            old_init(self, fn, *args, **kwargs)
 
         ParDo.__init__ = sentry_init_pardo
-        # old_window_init = WindowInto.__init__
-        # def sentry_init_window(self, *args, **kwargs):
-        #     if not getattr(self, "_sentry_is_patched", False):
-        #         self.WindowIntoFn.process = _wrap_task_call(self.WindowIntoFn.process)
-        #         self._sentry_is_patched = True
-        #     old_window_init(self, *args, **kwargs)
 
-        # WindowInto.__init__ = sentry_init_window
         ignore_logger("root")
         ignore_logger("bundle_processor.create")
 
@@ -127,7 +105,6 @@ class FunctionMaker(object):
 
         # check existence required attributes
         assert hasattr(self, 'name')
-        # print(hasattr(self, 'signature'))
         if not hasattr(self, 'signature'):
             raise TypeError('You are decorating a non function: %s' % func)
 
@@ -146,6 +123,8 @@ class FunctionMaker(object):
         else:
             callermodule = frame.f_globals.get('__name__', '?')
         func.__module__ = getattr(self, 'module', callermodule)
+        # raise Exception(kw)
+        # print(func.__dict__)
         func.__dict__.update(kw)
 
     def make(self, src_templ, evaldict=None, localdict=None, addsource=False, **attrs):
@@ -172,15 +151,15 @@ class FunctionMaker(object):
         filename = '<%s:decorator-gen-%d>' % (
             __file__, next(self._compile_count))
         try:
-            code = compile(src, filename, 'single')
-            exec(code, evaldict, localdict)
-            # raise Exception(evaldict)
+            # code = compile(src, filename, 'single')
+            exec(src, evaldict, localdict)
         except Exception:
             print('Error in generated code:', file=sys.stderr)
             print(src, file=sys.stderr)
             raise
         func = localdict["test"]
-        # raise Exception(getfullargspec(func))
+        # func.__defaults__ = self.defaults
+        # func(1)
         if addsource:
             attrs['__source__'] = src
         self.update(func, **attrs)
@@ -203,96 +182,63 @@ class FunctionMaker(object):
             name = None
             signature = None
             func = obj
-        # raise Exception(getfullargspec(func))
         self = cls(func, name, signature, defaults, doc, module)
-        # ibody = '\n'.join('    ' + line for line in body.splitlines())
         body = '''
 def test(%(signature)s):
     try:
-        return _func_(%(shortsignature)s)
-    except:
+        gen = _func_(%(shortsignature)s)
+        if isinstance(gen, types.GeneratorType):
+            return foo(gen)
+        return gen
+    except Exception:
         _call_()
-        raise
+        # raise Exception("SENTRY")
+        # exc_info = sys.exc_info()
+        # _capture_exception(exc_info, "https://f564f74b685a406991ddb66d22fdabe6@sentry.io/1465686")
+        # reraise(*exc_info)
         '''.strip()
         return self.make(body, evaldict, localdict, addsource, **attrs)
 
 def call_with_args(self, func, exep):
     localdict = dict(self=self)
-    evaldict = dict(_call_=exep, _func_=func, print=print)
+    evaldict = dict(_call_=exep, _func_=func, Exception=Exception, foo=foo, types=types, sys=sys, _capture_exception=_capture_exception, reraise=reraise)
     fun = FunctionMaker.create(
-            func, evaldict, localdict, __wrapped__=func)
+            func, evaldict, localdict)
     if hasattr(func, '__qualname__'):
         fun.__qualname__ = func.__qualname__
     return fun
 
-def _call_():
+def foo(generator):
+    while True:
+        try: 
+            yield next(generator)
+        except StopIteration:
+            raise
+        except:
+            raiseException()
+
+
+def raiseException():
     client_dsn = Hub.current.client.dsn
     exc_info = sys.exc_info()
     _capture_exception(exc_info, client_dsn)
     reraise(*exc_info)
 
 def _wrap_task_call(self, f):
+
     # client_dsn = Hub.current.client.dsn
-    # exc_info = sys.exc_info()
-    # _capture_exception(exc_info, client_dsn)
-    # reraise(*exc_info)
-    client_dsn = Hub.current.client.dsn
-    # from apache_beam.transforms.core import DoFn, _DoFnParam
-    # from apache_beam.typehints.decorators import getfullargspec
-    # import inspect
-    # from functools import wraps
-    # # import wrapt
-    # import decorator
-    # # gfa = getfullargspec(f)
-    # # func_args = gfa[0]
-    # # default_args = gfa[3]
-    # # print(gfa)
-    # # if default_args:
-    # #     for arg_idx in range(len(default_args)):
-    # #         count = len(func_args)-len(default_args)+arg_idx
-    # #         kwargs[func_args[count]] = default_args[arg_idx]
-
-
-
-    # # @decor
     def _inner(*args, **kwargs):
         # _inner.__dict__.update(**kwargs)
         try:
             return f(*args, **kwargs)
         except Exception:
-            exc_info = sys.exc_info()
-            _capture_exception(exc_info, client_dsn)
-            reraise(*exc_info)
+            raiseException()
+            # exc_info = sys.exc_info()
+            # _capture_exception(exc_info, client_dsn)
+            # reraise(*exc_info)
     if getfullargspec(f)[3]:
-        _inner = call_with_args(self, f, _call_)
-    # # args = getfullargspec(f).args
-    # # _inner.__getstate__ = f.__getstate__
-    # # _inner.__setstate__ = f.__setstate__
-    # # _inner.args = f.args
-    # # raise Exception(f.__closure__[1])
-    # # _inner.args = args
-    # # # _inner.__kwdefaults__ = f.__kwdefaults__
-    # if getfullargspec(f)[3]:
-    #     # _inner = decor(f)
-    # #     f_temp = decorator(f)
-    # #     def something(*args, **kwargs):
-    # #         return f_temp(*args, **kwargs)
-    # #     return something
-    # #     _inner.__call__ = f.__call__
-    # #     # _inner.__closure__ = f.__closure__
-    # #     # _inner.__code__ = f.__code__
-    # #     _inner.__doc__ = f.__doc__
-    # #     _inner.__name__ = f.__name__
-    # #     _inner.__defaults__ = f.__defaults__
-    # #     # _inner.__globals__ = f.__globals__
-    # #     _inner.__get__ = f.__get__
-    # #     _inner.__defaults__ = f.__defaults__
-    # #     # inspect.full
-    # #     # _inner.__code__ = f.__code__
-    # #     # raise(Exception(dir(f)))
-    # #     # _inner.__closure__[1].cell_contents.args = args
-    #     _inner = decor(f)
-    #     setattr(cls, "f", decor(getattr(cls, "f").im_func))
+        return call_with_args(self, f, raiseException)
+
     return _inner
 
 def _wrap_args_pec(original_args, f):
@@ -306,7 +252,6 @@ def _capture_exception(exc_info, client_dsn):
     hub.bind_client(client)
     ignore_logger("root")
     ignore_logger("bundle_processor.create")
-
     with capture_internal_exceptions():
         event, hint = event_from_exception(
             exc_info,
@@ -315,6 +260,7 @@ def _capture_exception(exc_info, client_dsn):
         )
 
         hub.capture_event(event, hint=hint)
+        print("SENTRY SENT")
 
 
 
