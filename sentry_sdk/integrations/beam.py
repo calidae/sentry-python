@@ -248,7 +248,7 @@ def _wrap_task_call(self, f):
 
     def _inner(*args, **kwargs):
         try:
-            return f(*args, **kwargs)
+            return _wrap_generator_call(f(*args, **kwargs), client_dsn)
         except Exception:
             raiseException(client_dsn)
 
