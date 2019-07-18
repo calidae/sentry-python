@@ -188,10 +188,10 @@ def test(%(signature)s):
     try:
         gen = _func_(%(shortsignature)s)
         if isinstance(gen, types.GeneratorType):
-            return foo(gen)
+            return foo(gen, client_dsn)
         return gen
     except Exception:
-        _call_(dsn)
+        _call_(client_dsn)
         # raise Exception("SENTRY")
         # exc_info = sys.exc_info()
         # _capture_exception(exc_info, "https://f564f74b685a406991ddb66d22fdabe6@sentry.io/1465686")
@@ -203,22 +203,22 @@ def call_with_args(self, func, exep):
     client_dsn = Hub.current.client.dsn
     if client_dsn is None:
         raise Exception("client is none")
-    localdict = dict(self=self, dsn=client_dsn)
-    evaldict = dict(_call_=exep, _func_=func, Exception=Exception, foo=foo, types=types, sys=sys, _capture_exception=_capture_exception, reraise=reraise)
+    localdict = dict(self=self)
+    evaldict = dict(_call_=exep, _func_=func, Exception=Exception, foo=foo, types=types, sys=sys, _capture_exception=_capture_exception, reraise=reraise, client_dsn=client_dsn)
     fun = FunctionMaker.create(
             func, evaldict, localdict)
     if hasattr(func, '__qualname__'):
         fun.__qualname__ = func.__qualname__
     return fun
 
-def foo(generator):
+def foo(generator, client_dsn):
     while True:
         try: 
             yield next(generator)
         except StopIteration:
             raise
         except:
-            raiseException()
+            raiseException(client_dsn)
 
 def raiseException(client_dsn):
     exc_info = sys.exc_info()
