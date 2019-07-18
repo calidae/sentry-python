@@ -48,9 +48,77 @@ class BeamIntegration(Integration):
         ignore_logger("bundle_processor.create")
 
 
+def call_with_args(self, func, exep):
+    client_dsn = Hub.current.client.dsn
+    localdict = dict(self=self)
+    evaldict = dict(
+        _exep_=exep,
+        _func_=func,
+        _call_=_wrap_generator_call,
+        Exception=Exception,
+        client_dsn=client_dsn,
+    )
+    fun = FunctionMaker.create(func, evaldict, localdict)
+    if hasattr(func, "__qualname__"):
+        fun.__qualname__ = func.__qualname__
+    return fun
+
+
+def _wrap_generator_call(gen, client_dsn):
+    if not isinstance(gen, types.GeneratorType):
+        return gen
+    while True:
+        try:
+            yield next(gen)
+        except StopIteration:
+            raise
+        except:
+            raiseException(client_dsn)
+
+
+def raiseException(client_dsn):
+    exc_info = sys.exc_info()
+    _capture_exception(exc_info, client_dsn)
+    reraise(*exc_info)
+
+
+def _wrap_task_call(self, f):
+
+    client_dsn = Hub.current.client.dsn
+
+    def _inner(*args, **kwargs):
+        try:
+            return _wrap_generator_call(f(*args, **kwargs), client_dsn)
+        except Exception:
+            raiseException(client_dsn)
+
+    if getfullargspec(f)[3]:
+        return call_with_args(self, f, raiseException)
+
+    return _inner
+
+
+def _capture_exception(exc_info, client_dsn):
+    hub = Hub.current
+    client = Client(dsn=client_dsn)
+    hub.bind_client(client)
+    ignore_logger("root")
+    ignore_logger("bundle_processor.create")
+    with capture_internal_exceptions():
+        event, hint = event_from_exception(
+            exc_info,
+            client_options=client.options,
+            mechanism={"type": "beam", "handled": False},
+        )
+
+        hub.capture_event(event, hint=hint)
+
 DEF = re.compile(r"\s*def\s*([_\w][_\w\d]*)\s*\(")
 
 
+"""
+Taken from micheles/decorator.py, https://github.com/micheles/decorator/blob/master/src/decorator.py.
+"""
 class FunctionMaker(object):
 
     _compile_count = itertools.count()
@@ -206,69 +274,3 @@ def _inner(%(signature)s):
         _exep_(client_dsn)
         """.strip()
         return self.make(body, evaldict, localdict, addsource, **attrs)
-
-
-def call_with_args(self, func, exep):
-    client_dsn = Hub.current.client.dsn
-    localdict = dict(self=self)
-    evaldict = dict(
-        _exep_=exep,
-        _func_=func,
-        Exception=Exception,
-        _call_=_wrap_generator_call,
-        client_dsn=client_dsn,
-    )
-    fun = FunctionMaker.create(func, evaldict, localdict)
-    if hasattr(func, "__qualname__"):
-        fun.__qualname__ = func.__qualname__
-    return fun
-
-
-def _wrap_generator_call(gen, client_dsn):
-    if not isinstance(gen, types.GeneratorType):
-        return gen
-    while True:
-        try:
-            yield next(gen)
-        except StopIteration:
-            raise
-        except:
-            raiseException(client_dsn)
-
-
-def raiseException(client_dsn):
-    exc_info = sys.exc_info()
-    _capture_exception(exc_info, client_dsn)
-    reraise(*exc_info)
-
-
-def _wrap_task_call(self, f):
-
-    client_dsn = Hub.current.client.dsn
-
-    def _inner(*args, **kwargs):
-        try:
-            return _wrap_generator_call(f(*args, **kwargs), client_dsn)
-        except Exception:
-            raiseException(client_dsn)
-
-    if getfullargspec(f)[3]:
-        return call_with_args(self, f, raiseException)
-
-    return _inner
-
-
-def _capture_exception(exc_info, client_dsn):
-    hub = Hub.current
-    client = Client(dsn=client_dsn)
-    hub.bind_client(client)
-    ignore_logger("root")
-    ignore_logger("bundle_processor.create")
-    with capture_internal_exceptions():
-        event, hint = event_from_exception(
-            exc_info,
-            client_options=client.options,
-            mechanism={"type": "beam", "handled": False},
-        )
-
-        hub.capture_event(event, hint=hint)
