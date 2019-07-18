@@ -117,7 +117,7 @@ DEF = re.compile(r"\s*def\s*([_\w][_\w\d]*)\s*\(")
 
 
 """
-Taken from micheles/decorator.py, https://github.com/micheles/decorator/blob/master/src/decorator.py.
+Modified from micheles/decorator.py, https://github.com/micheles/decorator/blob/master/src/decorator.py.
 """
 class FunctionMaker(object):
 
