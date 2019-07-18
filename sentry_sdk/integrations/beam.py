@@ -192,10 +192,6 @@ def test(%(signature)s):
         return gen
     except Exception:
         _call_(client_dsn)
-        # raise Exception("SENTRY")
-        # exc_info = sys.exc_info()
-        # _capture_exception(exc_info, "https://f564f74b685a406991ddb66d22fdabe6@sentry.io/1465686")
-        # reraise(*exc_info)
         '''.strip()
         return self.make(body, evaldict, localdict, addsource, **attrs)
 
@@ -204,7 +200,7 @@ def call_with_args(self, func, exep):
     if client_dsn is None:
         raise Exception("client is none")
     localdict = dict(self=self)
-    evaldict = dict(_call_=exep, _func_=func, Exception=Exception, foo=foo, types=types, sys=sys, _capture_exception=_capture_exception, reraise=reraise, client_dsn=client_dsn)
+    evaldict = dict(_call_=exep, _func_=func, Exception=Exception, foo=foo, types=types, client_dsn=client_dsn)
     fun = FunctionMaker.create(
             func, evaldict, localdict)
     if hasattr(func, '__qualname__'):
