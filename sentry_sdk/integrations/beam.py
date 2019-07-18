@@ -186,28 +186,25 @@ class FunctionMaker(object):
         body = '''
 def test(%(signature)s):
     try:
-        gen = _func_(%(shortsignature)s)
-        if isinstance(gen, types.GeneratorType):
-            return foo(gen, client_dsn)
-        return gen
+        return _call_(_func_(%(shortsignature)s), client_dsn)
     except Exception:
-        _call_(client_dsn)
+        _exep_(client_dsn)
         '''.strip()
         return self.make(body, evaldict, localdict, addsource, **attrs)
 
 def call_with_args(self, func, exep):
     client_dsn = Hub.current.client.dsn
-    if client_dsn is None:
-        raise Exception("client is none")
     localdict = dict(self=self)
-    evaldict = dict(_call_=exep, _func_=func, Exception=Exception, foo=foo, types=types, client_dsn=client_dsn)
+    evaldict = dict(_exep_=exep, _func_=func, Exception=Exception, _call_=_wrap_generator_call, client_dsn=client_dsn)
     fun = FunctionMaker.create(
             func, evaldict, localdict)
     if hasattr(func, '__qualname__'):
         fun.__qualname__ = func.__qualname__
     return fun
 
-def foo(generator, client_dsn):
+def _wrap_generator_call(gen, client_dsn):
+    if isinstance(gen, types.GeneratorType):
+        return gen
     while True:
         try: 
             yield next(generator)
