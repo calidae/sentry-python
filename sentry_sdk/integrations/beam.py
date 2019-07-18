@@ -191,7 +191,7 @@ def test(%(signature)s):
             return foo(gen)
         return gen
     except Exception:
-        _call_()
+        _call_(dsn)
         # raise Exception("SENTRY")
         # exc_info = sys.exc_info()
         # _capture_exception(exc_info, "https://f564f74b685a406991ddb66d22fdabe6@sentry.io/1465686")
@@ -200,7 +200,10 @@ def test(%(signature)s):
         return self.make(body, evaldict, localdict, addsource, **attrs)
 
 def call_with_args(self, func, exep):
-    localdict = dict(self=self)
+    client_dsn = Hub.current.client.dsn
+    if client_dsn is None:
+        raise Exception("client is none")
+    localdict = dict(self=self, dsn=client_dsn)
     evaldict = dict(_call_=exep, _func_=func, Exception=Exception, foo=foo, types=types, sys=sys, _capture_exception=_capture_exception, reraise=reraise)
     fun = FunctionMaker.create(
             func, evaldict, localdict)
@@ -217,33 +220,26 @@ def foo(generator):
         except:
             raiseException()
 
-
-def raiseException():
-    client_dsn = Hub.current.client.dsn
+def raiseException(client_dsn):
     exc_info = sys.exc_info()
     _capture_exception(exc_info, client_dsn)
     reraise(*exc_info)
 
 def _wrap_task_call(self, f):
 
-    # client_dsn = Hub.current.client.dsn
+    client_dsn = Hub.current.client.dsn
     def _inner(*args, **kwargs):
         # _inner.__dict__.update(**kwargs)
         try:
             return f(*args, **kwargs)
         except Exception:
-            raiseException()
+            raiseException(client_dsn)
             # exc_info = sys.exc_info()
             # _capture_exception(exc_info, client_dsn)
             # reraise(*exc_info)
     if getfullargspec(f)[3]:
         return call_with_args(self, f, raiseException)
 
-    return _inner
-
-def _wrap_args_pec(original_args, f):
-    def _inner(*args, **kwargs):
-        return original_args(f)
     return _inner
 
 def _capture_exception(exc_info, client_dsn):
