@@ -203,11 +203,11 @@ def call_with_args(self, func, exep):
     return fun
 
 def _wrap_generator_call(gen, client_dsn):
-    if isinstance(gen, types.GeneratorType):
+    if not isinstance(gen, types.GeneratorType):
         return gen
     while True:
         try: 
-            yield next(generator)
+            yield next(gen)
         except StopIteration:
             raise
         except:
