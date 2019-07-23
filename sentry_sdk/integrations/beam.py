@@ -28,8 +28,24 @@ class BeamIntegration(Integration):
     def setup_once():
         # type: () -> None
         from apache_beam.transforms.core import ParDo, WindowInto  # type: ignore
-        from apache_beam.typehints.decorators import getfullargspec
+        # from apache_beam.typehints.decorators import getfullargspec
         from apache_beam.transforms.core import get_function_arguments
+        from future.utils import raise_with_traceback
+        from apache_beam.runners.worker import operations
+        from functools import wraps
+
+        # old_op = operations.DoOperation.setup
+        # def new_setup(self, *args, **kwargs):
+        #     old_op(self, *args, **kwargs)
+        #     client_dsn = Hub.current.client.dsn
+        #     old_re = self.dofn_runner._reraise_augmented
+        #     def _inner(exn):
+        #         exc_info = sys.exc_info()
+        #         _capture_exception(exc_info, client_dsn)
+        #         old_re(exn)
+        #     self.dofn_runner._reraise_augmented = _inner
+
+        # operations.DoOperation.setup = new_setup
 
         old_init = ParDo.__init__
 
@@ -44,29 +60,29 @@ class BeamIntegration(Integration):
 
         ParDo.__init__ = sentry_init_pardo
 
+
+
         ignore_logger("root")
         ignore_logger("bundle_processor.create")
 
 
-def call_with_args(self, func, exep):
+def call_with_args(self, func):
     client_dsn = Hub.current.client.dsn
-    localdict = dict(self=self)
     evaldict = dict(
-        _exep_=exep,
+        _exep_=raiseException,
         _func_=func,
         _call_=_wrap_generator_call,
         Exception=Exception,
         client_dsn=client_dsn,
+        types=types
     )
-    fun = FunctionMaker.create(func, evaldict, localdict)
+    fun = FunctionMaker.create(func, evaldict)
     if hasattr(func, "__qualname__"):
         fun.__qualname__ = func.__qualname__
     return fun
 
 
 def _wrap_generator_call(gen, client_dsn):
-    if not isinstance(gen, types.GeneratorType):
-        return gen
     while True:
         try:
             yield next(gen)
@@ -81,19 +97,20 @@ def raiseException(client_dsn):
     _capture_exception(exc_info, client_dsn)
     reraise(*exc_info)
 
-
-def _wrap_task_call(self, f):
-
+def _wrap_invoke_call():
     client_dsn = Hub.current.client.dsn
-
-    def _inner(*args, **kwargs):
+    def _inner(self, windowed_value):
         try:
-            return _wrap_generator_call(f(*args, **kwargs), client_dsn)
+            return self.do_fn_invoker.invoke_process(windowed_value)
         except Exception:
             raiseException(client_dsn)
+    return _inner
 
-    if getfullargspec(f)[3]:
-        return call_with_args(self, f, raiseException)
+def _wrap_task_call(self, f):
+    _inner = call_with_args(self, f)
+    _inner.__used__ = True
+    if getattr(f, "__used__", False):
+        return f
 
     return _inner
 
@@ -202,7 +219,7 @@ class FunctionMaker(object):
 
         func.__dict__.update(kw)
 
-    def make(self, src_templ, evaldict=None, localdict=None, addsource=False, **attrs):
+    def make(self, src_templ, evaldict=None, addsource=False, **attrs):
         "Make a new function from a given template and update the signature"
         src = src_templ % vars(self)  # expand name and signature
         # raise Exception(src, evaldict)
@@ -225,6 +242,7 @@ class FunctionMaker(object):
         # (such as cProfile) that depend on the tuple of (<filename>,
         # <definition line>, <function name>) being unique.
         filename = "<%s:decorator-gen-%d>" % (__file__, next(self._compile_count))
+        localdict = {}
         try:
             # code = compile(src, filename, 'single')
             exec(src, evaldict, localdict)
@@ -244,7 +262,6 @@ class FunctionMaker(object):
         cls,
         obj,
         evaldict,
-        localdict,
         defaults=None,
         doc=None,
         module=None,
@@ -269,8 +286,14 @@ class FunctionMaker(object):
         body = """
 def _inner(%(signature)s):
     try:
-        return _call_(_func_(%(shortsignature)s), client_dsn)
+        print("Executing String _inner", _func_)
+        gen = _func_(%(shortsignature)s)
+        if not isinstance(gen, types.GeneratorType):
+            return gen
+        gen = _call_(gen, client_dsn)
+        return gen
     except Exception:
         _exep_(client_dsn)
+        raise
         """.strip()
-        return self.make(body, evaldict, localdict, addsource, **attrs)
+        return self.make(body, evaldict, addsource, **attrs)
