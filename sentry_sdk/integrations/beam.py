@@ -94,7 +94,8 @@ def _wrap_task_call(self, f):
 
 
 def _capture_exception(exc_info, client):
-    if Hub.current.client is None:
+    hub = Hub.current
+    if hub.client is None:
         hub.bind_client(client)
     ignore_logger("root")
     ignore_logger("bundle_processor.create")
