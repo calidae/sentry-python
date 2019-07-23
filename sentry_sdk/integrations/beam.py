@@ -96,7 +96,7 @@ def _capture_exception(exc_info, client):
     hub = Hub.current
     if hub.client is None:
         hub.bind_client(client)
-    integration = hub.get_integration(ExcepthookIntegration)
+    integration = hub.get_integration(BeamIntegration)
     if integration:
         ignore_logger("root")
         ignore_logger("bundle_processor.create")
