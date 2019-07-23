@@ -89,7 +89,6 @@ def _wrap_task_call(self, f):
     _inner.__used__ = True
     if getattr(f, "__used__", False):
         return f
-
     return _inner
 
 
@@ -97,16 +96,18 @@ def _capture_exception(exc_info, client):
     hub = Hub.current
     if hub.client is None:
         hub.bind_client(client)
-    ignore_logger("root")
-    ignore_logger("bundle_processor.create")
-    with capture_internal_exceptions():
-        event, hint = event_from_exception(
-            exc_info,
-            client_options=client.options,
-            mechanism={"type": "beam", "handled": False},
-        )
+    integration = hub.get_integration(ExcepthookIntegration)
+    if integration:
+        ignore_logger("root")
+        ignore_logger("bundle_processor.create")
+        with capture_internal_exceptions():
+            event, hint = event_from_exception(
+                exc_info,
+                client_options=client.options,
+                mechanism={"type": "beam", "handled": False},
+            )
 
-        hub.capture_event(event, hint=hint)
+            hub.capture_event(event, hint=hint)
 
 DEF = re.compile(r"\s*def\s*([_\w][_\w\d]*)\s*\(")
 
