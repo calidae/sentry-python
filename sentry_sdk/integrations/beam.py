@@ -29,23 +29,10 @@ class BeamIntegration(Integration):
         # type: () -> None
         from apache_beam.transforms.core import ParDo, WindowInto  # type: ignore
         # from apache_beam.typehints.decorators import getfullargspec
-        from apache_beam.transforms.core import get_function_arguments
-        from future.utils import raise_with_traceback
-        from apache_beam.runners.worker import operations
-        from functools import wraps
-
-        # old_op = operations.DoOperation.setup
-        # def new_setup(self, *args, **kwargs):
-        #     old_op(self, *args, **kwargs)
-        #     client_dsn = Hub.current.client.dsn
-        #     old_re = self.dofn_runner._reraise_augmented
-        #     def _inner(exn):
-        #         exc_info = sys.exc_info()
-        #         _capture_exception(exc_info, client_dsn)
-        #         old_re(exn)
-        #     self.dofn_runner._reraise_augmented = _inner
-
-        # operations.DoOperation.setup = new_setup
+        # from apache_beam.transforms.core import get_function_arguments
+        # from future.utils import raise_with_traceback
+        # from apache_beam.runners.worker import operations
+        # from functools import wraps
 
         old_init = ParDo.__init__
 
@@ -67,13 +54,13 @@ class BeamIntegration(Integration):
 
 
 def call_with_args(self, func):
-    client_dsn = Hub.current.client.dsn
+    client = Hub.current.client
     evaldict = dict(
         _exep_=raiseException,
         _func_=func,
         _call_=_wrap_generator_call,
         Exception=Exception,
-        client_dsn=client_dsn,
+        client=client,
         types=types
     )
     fun = FunctionMaker.create(func, evaldict)
@@ -82,29 +69,20 @@ def call_with_args(self, func):
     return fun
 
 
-def _wrap_generator_call(gen, client_dsn):
+def _wrap_generator_call(gen, client):
     while True:
         try:
             yield next(gen)
         except StopIteration:
             raise
         except:
-            raiseException(client_dsn)
+            raiseException(client)
 
 
-def raiseException(client_dsn):
+def raiseException(client):
     exc_info = sys.exc_info()
-    _capture_exception(exc_info, client_dsn)
+    _capture_exception(exc_info, client)
     reraise(*exc_info)
-
-def _wrap_invoke_call():
-    client_dsn = Hub.current.client.dsn
-    def _inner(self, windowed_value):
-        try:
-            return self.do_fn_invoker.invoke_process(windowed_value)
-        except Exception:
-            raiseException(client_dsn)
-    return _inner
 
 def _wrap_task_call(self, f):
     _inner = call_with_args(self, f)
@@ -115,10 +93,9 @@ def _wrap_task_call(self, f):
     return _inner
 
 
-def _capture_exception(exc_info, client_dsn):
-    hub = Hub.current
-    client = Client(dsn=client_dsn)
-    hub.bind_client(client)
+def _capture_exception(exc_info, client):
+    if Hub.current.client is None:
+        hub.bind_client(client)
     ignore_logger("root")
     ignore_logger("bundle_processor.create")
     with capture_internal_exceptions():
@@ -286,14 +263,13 @@ class FunctionMaker(object):
         body = """
 def _inner(%(signature)s):
     try:
-        print("Executing String _inner", _func_)
         gen = _func_(%(shortsignature)s)
         if not isinstance(gen, types.GeneratorType):
             return gen
-        gen = _call_(gen, client_dsn)
+        gen = _call_(gen, client)
         return gen
     except Exception:
-        _exep_(client_dsn)
+        _exep_(client)
         raise
         """.strip()
         return self.make(body, evaldict, addsource, **attrs)
