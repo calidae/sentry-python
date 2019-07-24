@@ -16,6 +16,7 @@ from sentry_sdk.integrations.logging import ignore_logger
 import inspect
 import types
 from inspect import getfullargspec
+from functools import wraps
 
 
 class BeamIntegration(Integration):
@@ -27,12 +28,7 @@ class BeamIntegration(Integration):
     @staticmethod
     def setup_once():
         # type: () -> None
-        from apache_beam.transforms.core import ParDo, WindowInto  # type: ignore
-        # from apache_beam.typehints.decorators import getfullargspec
-        # from apache_beam.transforms.core import get_function_arguments
-        # from future.utils import raise_with_traceback
-        # from apache_beam.runners.worker import operations
-        # from functools import wraps
+        from apache_beam.transforms.core import ParDo  # type: ignore
 
         old_init = ParDo.__init__
 
@@ -40,20 +36,18 @@ class BeamIntegration(Integration):
 
             if not getattr(self, "_sentry_is_patched", False):
 
-                fn.process = _wrap_task_call(fn, fn.process)
+                fn.process = _wrap_task_call(fn.process)
 
                 self._sentry_is_patched = True
             old_init(self, fn, *args, **kwargs)
 
         ParDo.__init__ = sentry_init_pardo
 
-
-
         ignore_logger("root")
         ignore_logger("bundle_processor.create")
 
 
-def call_with_args(self, func):
+def call_with_args(func):
     client = Hub.current.client
     evaldict = dict(
         _exep_=raiseException,
@@ -61,7 +55,8 @@ def call_with_args(self, func):
         _call_=_wrap_generator_call,
         Exception=Exception,
         client=client,
-        types=types
+        types=types,
+        wraps=wraps,
     )
     fun = FunctionMaker.create(func, evaldict)
     if hasattr(func, "__qualname__"):
@@ -84,8 +79,9 @@ def raiseException(client):
     _capture_exception(exc_info, client)
     reraise(*exc_info)
 
-def _wrap_task_call(self, f):
-    _inner = call_with_args(self, f)
+def _wrap_task_call(f):
+    client = Hub.current.client
+    _inner = Func(f, client) #call_with_args(f)
     _inner.__used__ = True
     if getattr(f, "__used__", False):
         return f
@@ -108,6 +104,71 @@ def _capture_exception(exc_info, client):
             )
 
             hub.capture_event(event, hint=hint)
+
+
+
+class Func(object):
+    def __getattribute__(self, name):
+        # if name == '__class__':
+        #     # calling type(decorator()) will return <type 'function'>
+        #     # this is used to trick the inspect module >:)
+        #     print(super(Func, self).__getattribute__(name))
+        #     print(type(self.__call__))
+        #     return type(self.__call__)#types.FunctionType(self.__code__, self.__globals__)
+        return super(Func, self).__getattribute__(name)
+
+    def __init__(self, func, client):
+        # self.__dict__ = func.__dict__
+        # self.kwargs = self.argspec.kwargs
+        self.func = func
+        self.client = client
+        self._init_func()
+
+    def __call__(self, *args, **kwargs):
+        try:
+            # if "self" in argspec.args:
+            #     args = args[1:]
+            #     self.argspec.remove("self")
+            self.args = args
+            self.kwargs = kwargs
+            gen = self.func(*args, **kwargs)
+            # if not isinstance(gen, types.GeneratorType):
+            #     return gen
+            # gen = _wrap_generator_call(gen, self.client)
+            return gen
+        except Exception:
+            # raiseException(self.client)
+            print("Agh")
+
+    def _init_func(self):
+        func = self.func
+        self.argspec = getfullargspec(func)
+        # self.args = self.argspec.args
+        self.__defaults__ = func.__defaults__
+        self.__closure__ = func.__closure__
+        self.__code__ = func.__code__
+        self.__doc__ = func.__doc__
+        self.__name__ = func.__name__
+        self.__globals__ = func.__globals__
+        self.__annotations__ = func.__annotations__
+        self.__kwdefaults__ = func.__kwdefaults__
+        self.__func__ = getattr(func, "__func__", None)
+        self.__get__ = func.__get__
+
+        if hasattr(func, "__qualname__"):
+            self.__qualname__ = func.__qualname__
+        self.args = None
+        self.kwargs = None
+
+    def __getstate__(self):
+        return {"func": self.func, "client": self.client}
+
+    def __setstate__(self, state):
+        # print("STATE", state)
+        self.func = state["func"]
+        self.client = state["client"]
+        self._init_func()
+
 
 DEF = re.compile(r"\s*def\s*([_\w][_\w\d]*)\s*\(")
 
@@ -263,6 +324,7 @@ class FunctionMaker(object):
             func = obj
         self = cls(func, name, signature, defaults, doc, module)
         body = """
+@wraps(_func_)
 def _inner(%(signature)s):
     try:
         gen = _func_(%(shortsignature)s)
