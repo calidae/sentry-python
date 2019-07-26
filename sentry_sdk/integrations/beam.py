@@ -198,7 +198,6 @@ class FunctionMaker(object):
     def make(self, src_templ, evaldict=None, addsource=False, **attrs):
         "Make a new function from a given template and update the signature"
         src = src_templ % vars(self)  # expand name and signature
-        # raise Exception(src, evaldict)
         evaldict = evaldict or {}
         mo = DEF.search(src)
         if mo is None:
