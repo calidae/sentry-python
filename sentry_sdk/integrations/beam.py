@@ -229,7 +229,7 @@ class FunctionMaker(object):
             print("Error in generated code:", file=sys.stderr)
             print(src, file=sys.stderr)
             raise
-        func = localdict["_inner"]
+        func = localdict[name]
  
         if addsource:
             attrs["__source__"] = src
@@ -263,7 +263,7 @@ class FunctionMaker(object):
             func = obj
         self = cls(func, name, signature, defaults, doc, module)
         body = """
-def _inner(%(signature)s):
+def %(name)s(%(signature)s):
     try:
         gen = _func_(%(shortsignature)s)
         if not isinstance(gen, types.GeneratorType):
