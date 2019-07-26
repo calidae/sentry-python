@@ -40,7 +40,7 @@ class BeamIntegration(Integration):
 
             if not getattr(self, "_sentry_is_patched", False):
 
-                fn.process = _wrap_task_call(fn, fn.process)
+                fn.process = _wrap_task_call(fn.process)
 
                 self._sentry_is_patched = True
             old_init(self, fn, *args, **kwargs)
@@ -53,7 +53,7 @@ class BeamIntegration(Integration):
         ignore_logger("bundle_processor.create")
 
 
-def call_with_args(self, func):
+def call_with_args(func):
     client = Hub.current.client
     evaldict = dict(
         _exep_=raiseException,
@@ -84,8 +84,8 @@ def raiseException(client):
     _capture_exception(exc_info, client)
     reraise(*exc_info)
 
-def _wrap_task_call(self, f):
-    _inner = call_with_args(self, f)
+def _wrap_task_call(f):
+    _inner = call_with_args(f)
     _inner.__used__ = True
     if getattr(f, "__used__", False):
         return f

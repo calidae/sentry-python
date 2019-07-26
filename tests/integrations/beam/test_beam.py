@@ -59,8 +59,8 @@ def test_monkey_patch_getfullargspec():
     def check_fullargspec(f, *args, **kwargs):
         real_args = getfullargspec(f)
 
-        # if "self" in real_args.args:
-        #     real_args.args.remove("self")
+        if "self" in real_args.args:
+            real_args.args.remove("self")
 
         fake_args = getfullargspec(_wrap_task_call(f))
         assert (
