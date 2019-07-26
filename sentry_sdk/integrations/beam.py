@@ -76,6 +76,8 @@ def _wrap_generator_call(gen, client):
 def raiseException(client):
     print("Exception raised")
     exc_info = sys.exc_info()
+    # exc_type, exc_value, tb = (exc_info)
+    print("raiseException", exc_info)
     _capture_exception(exc_info, client)
     reraise(*exc_info)
 
@@ -91,10 +93,10 @@ def _wrap_task_call(f):
     #         return gen
     #     except Exception:
     #         raiseException(client)
-    _inner = Func(f, client)
-    _inner.__used__ = True
     if getattr(f, "__used__", False):
         return f
+    _inner = Func(f, client)
+
     return _inner
 
 
@@ -166,6 +168,7 @@ class Func:
 
     def _init_func(self):
         func = self.func
+        self.__used__ = True
         # self.argspec = getfullargspec(func)
         # self.args = self.argspec.args
         self.__defaults__ = func.__defaults__

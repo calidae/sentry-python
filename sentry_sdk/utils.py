@@ -264,8 +264,10 @@ def get_lines_from_file(
 
     if source is None:
         try:
+            print("OSMAR, get_lines_from_file")
             source = linecache.getlines(filename)
         except (OSError, IOError):
+            print("Osmar, OSError, IOError")
             return [], None, []
 
     if not source:
@@ -369,6 +371,7 @@ def filename_for_module(module, abs_path):
 def serialize_frame(frame, tb_lineno=None, with_locals=True):
     # type: (FrameType, Optional[int], bool) -> Dict[str, Any]
     f_code = getattr(frame, "f_code", None)
+    print("serialize_frame", frame, f_code)
     if not f_code:
         abs_path = None
         function = None
@@ -402,6 +405,7 @@ def serialize_frame(frame, tb_lineno=None, with_locals=True):
 
 def stacktrace_from_traceback(tb=None, with_locals=True):
     # type: (Optional[TracebackType], bool) -> Dict[str, List[Dict[str, Any]]]
+    print("stacktrace_from_traceback", tb)
     return {
         "frames": [
             serialize_frame(
@@ -418,6 +422,7 @@ def current_stacktrace(with_locals=True):
     frames = []
 
     f = sys._getframe()
+    print(f)
     while f is not None:
         if not should_hide_frame(f):
             frames.append(serialize_frame(f, with_locals=with_locals))
@@ -452,11 +457,12 @@ def single_exception_from_error_tuple(
             "number", errno
         )
 
+    print("single_exception_from_error_tuple", tb)
     if client_options is None:
         with_locals = True
     else:
         with_locals = client_options["with_locals"]
-
+    # print("single_exception", tb)
     return {
         "module": get_type_module(exc_type),
         "type": get_type_name(exc_type),
@@ -515,8 +521,10 @@ def exceptions_from_error_tuple(
 ):
     # type: (...) -> List[Dict[str, Any]]
     exc_type, exc_value, tb = exc_info
+    print("exceptions_from_error_tuple", tb)
     rv = []
     for exc_type, exc_value, tb in walk_exception_chain(exc_info):
+        # print("exceptions_from_error_tuple", tb.frame)
         rv.append(
             single_exception_from_error_tuple(
                 exc_type, exc_value, tb, client_options, mechanism
@@ -628,6 +636,7 @@ def event_from_exception(
 ):
     # type: (...) -> Tuple[Dict[str, Any], Dict[str, Any]]
     exc_info = exc_info_from_error(exc_info)
+    print("event_from_exception", exc_info)
     hint = event_hint_with_exc_info(exc_info)
     return (
         {
