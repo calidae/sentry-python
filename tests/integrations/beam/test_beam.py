@@ -7,7 +7,11 @@ import inspect
 # pytest.importorskip("apache-beam")
 
 from sentry_sdk import Hub, configure_scope
-from sentry_sdk.integrations.beam import BeamIntegration, _wrap_task_call, getfullargspec
+from sentry_sdk.integrations.beam import (
+    BeamIntegration,
+    _wrap_task_call,
+    getfullargspec,
+)
 
 from apache_beam.typehints.typehints import AnyTypeConstraint
 from apache_beam.typehints.trivial_inference import instance_to_type
@@ -54,6 +58,7 @@ test_parent = A(foo)
 test_child = B()
 
 # print(type(test_parent))
+
 
 def test_monkey_patch_getfullargspec():
     def check_fullargspec(f, *args, **kwargs):
@@ -114,7 +119,11 @@ def test_monkey_patch_signature():
             raise
         expected_signature = inspect.signature(f)
         test_signature = inspect.signature(_wrap_task_call(f))
-        assert(expected_signature == test_signature), "Failed on {}, signature {} does not match {}".format(f, expected_signature, test_signature)
+        assert (
+            expected_signature == test_signature
+        ), "Failed on {}, signature {} does not match {}".format(
+            f, expected_signature, test_signature
+        )
 
     check_signature(foo)
     check_signature(bar, 1, 5)
@@ -123,6 +132,7 @@ def test_monkey_patch_signature():
     check_signature(test_child.fn, False, element=True)
     check_signature(test_child.fn, True)
     print("Passed Signature")
+
 
 test_monkey_patch_getfullargspec()
 test_monkey_patch_pickle()

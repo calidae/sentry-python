@@ -27,12 +27,7 @@ class BeamIntegration(Integration):
     @staticmethod
     def setup_once():
         # type: () -> None
-        from apache_beam.transforms.core import ParDo, WindowInto  # type: ignore
-        # from apache_beam.typehints.decorators import getfullargspec
-        # from apache_beam.transforms.core import get_function_arguments
-        # from future.utils import raise_with_traceback
-        # from apache_beam.runners.worker import operations
-        # from functools import wraps
+        from apache_beam.transforms.core import ParDo  # type: ignore
 
         old_init = ParDo.__init__
 
@@ -47,8 +42,6 @@ class BeamIntegration(Integration):
 
         ParDo.__init__ = sentry_init_pardo
 
-
-
         ignore_logger("root")
         ignore_logger("bundle_processor.create")
 
@@ -61,7 +54,7 @@ def call_with_args(func):
         _call_=_wrap_generator_call,
         Exception=Exception,
         client=client,
-        types=types
+        types=types,
     )
     fun = FunctionMaker.create(func, evaldict)
     if hasattr(func, "__qualname__"):
@@ -83,6 +76,7 @@ def raiseException(client):
     exc_info = sys.exc_info()
     _capture_exception(exc_info, client)
     reraise(*exc_info)
+
 
 def _wrap_task_call(f):
     _inner = call_with_args(f)
@@ -109,12 +103,15 @@ def _capture_exception(exc_info, client):
 
             hub.capture_event(event, hint=hint)
 
+
 DEF = re.compile(r"\s*def\s*([_\w][_\w\d]*)\s*\(")
 
 
 """
 Modified from micheles/decorator.py, https://github.com/micheles/decorator/blob/master/src/decorator.py.
 """
+
+
 class FunctionMaker(object):
 
     _compile_count = itertools.count()
@@ -230,7 +227,7 @@ class FunctionMaker(object):
             print(src, file=sys.stderr)
             raise
         func = localdict[name]
- 
+
         if addsource:
             attrs["__source__"] = src
         self.update(func, **attrs)
