@@ -16,7 +16,6 @@ from sentry_sdk.integrations.logging import ignore_logger
 
 import inspect
 import types
-from functools import wraps, partialmethod
 
 try:
     from inspect import getfullargspec
@@ -129,7 +128,7 @@ def _capture_exception(exc_info, client):
 #         return super().__new__(*args, **kwargs)
 
 
-class Func(Method):
+class Func:
     def __getattribute__(self, name):
         # if name == '__class__':
         # #     # calling type(decorator()) will return <type 'function'>
@@ -138,6 +137,7 @@ class Func(Method):
         # #     print(type(self.__call__))
         # #     return type(self.__call__)#types.FunctionType(self.__code__, self.__globals__)
         #     return types.MethodType
+
         return super(Func, self).__getattribute__(name)
 
     def __init__(self, func, client):
@@ -177,8 +177,9 @@ class Func(Method):
         self.__annotations__ = getattr(func, "__annotations__", None)
         self.__kwdefaults__ = getattr(func, "__kwdefaults__", None)
         self.__func__ = getattr(func, "__func__", None)
+        self.__wrapped__ = func
 
-        attributes = ["func_code", "func_defaults", "func_closure", "func_dict", "func_doc", "func_globals", "func_name"]
+        attributes = ["im_self", "func_code", "func_defaults", "func_closure", "func_dict", "func_doc", "func_globals", "func_name"]
         for attr in attributes:
             setattr(self, attr, getattr(func, attr, None))
 
