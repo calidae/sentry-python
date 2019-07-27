@@ -254,7 +254,6 @@ def get_lines_from_file(
     # type: (...) -> Tuple[List[str], Optional[str], List[str]]
     context_lines = 5
     source = None
-    raise Exception("Osmar, get lines from file")
     if loader is not None and hasattr(loader, "get_source"):
         try:
             source_str = loader.get_source(module)  # type: Optional[str]
