@@ -14,6 +14,8 @@ from sentry_sdk._compat import reraise
 from sentry_sdk.integrations import Integration
 from sentry_sdk.integrations.logging import ignore_logger
 
+import linecache
+
 import inspect
 import types
 
@@ -73,8 +75,10 @@ def _wrap_generator_call(gen, client):
             raiseException(client)
 
 
-def raiseException(client):
+def raiseException(client, passed_cache):
     print("Exception raised")
+    print(passed_cache)
+    linecache.cache.update(passed_cache)
     exc_info = sys.exc_info()
     # exc_type, exc_value, tb = (exc_info)
     print("raiseException", exc_info)
@@ -95,7 +99,7 @@ def _wrap_task_call(f):
     #         raiseException(client)
     if getattr(f, "__used__", False):
         return f
-    _inner = Func(f, client)
+    _inner = Func(f, client, __file__)
 
     return _inner
 
@@ -142,11 +146,15 @@ class Func:
 
         return super(Func, self).__getattribute__(name)
 
-    def __init__(self, func, client):
+    def __init__(self, func, client, filename):
         # self.__dict__ = func.__dict__
         # self.kwargs = self.argspec.kwargs
         self.func = func
         self.client = client
+        self.filename = filename
+        if self.filename not in linecache.cache:
+            linecache.getlines(self.filename)
+        self.cache = linecache.cache
         self._init_func()
 
     def __call__(self, *args, **kwargs):
@@ -163,7 +171,7 @@ class Func:
             gen = _wrap_generator_call(gen, self.client)
             return gen
         except Exception:
-            raiseException(self.client)
+            raiseException(self.client, self.cache)
             #print("Agh")
 
     def _init_func(self):
@@ -193,13 +201,15 @@ class Func:
         self.args = None
         self.kwargs = None
 
+
     def __getstate__(self):
-        return {"func": self.func, "client": self.client}
+        return {"func": self.func, "client": self.client, "cache":self.cache}
 
     def __setstate__(self, state):
         # print("STATE", state)
         self.func = state["func"]
         self.client = state["client"]
+        self.cache = state["cache"]
         self._init_func()
 
     def __get__(self, instance, owner):
