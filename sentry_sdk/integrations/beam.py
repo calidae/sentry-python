@@ -52,8 +52,9 @@ class BeamIntegration(Integration):
                 #     fn.process =  _wrap_task_call(fn.process)
                 
                 # setattr(fn, "start_bundle", new_start)
-
-                fn.process =  _wrap_task_call(fn.process)
+                import __main__ as main
+                filename = main.__file__
+                fn.process =  _wrap_task_call(fn.process, filename)
 
                 self._sentry_is_patched = True
             old_init(self, fn, *args, **kwargs)
@@ -77,7 +78,7 @@ def _wrap_generator_call(gen, client):
 
 def raiseException(client, passed_cache):
     print("Exception raised")
-    print(passed_cache)
+    print(passed_cache.keys())
     linecache.cache.update(passed_cache)
     exc_info = sys.exc_info()
     # exc_type, exc_value, tb = (exc_info)
@@ -85,7 +86,7 @@ def raiseException(client, passed_cache):
     _capture_exception(exc_info, client)
     reraise(*exc_info)
 
-def _wrap_task_call(f):
+def _wrap_task_call(f, filename):
     client = Hub.current.client
     # def _inner(*args, **kwargs):
     #     raise Exception("process")
@@ -97,9 +98,8 @@ def _wrap_task_call(f):
     #         return gen
     #     except Exception:
     #         raiseException(client)
-    if getattr(f, "__used__", False):
-        return f
-    _inner = Func(f, client, __file__)
+
+    _inner = Func.create(f, client, filename)
 
     return _inner
 
@@ -154,7 +154,7 @@ class Func:
         self.filename = filename
         if self.filename not in linecache.cache:
             linecache.getlines(self.filename)
-        self.cache = linecache.cache
+        self.cache = linecache.cache.copy()
         self._init_func()
 
     def __call__(self, *args, **kwargs):
@@ -163,6 +163,7 @@ class Func:
             # if "self" in self.argspec.args:
             #     args = args[1:]
             #     self.argspec.args.remove("self")
+            linecache.cache.update(self.cache)
             self.args = args
             self.kwargs = kwargs
             gen = self.func(*args, **kwargs)
@@ -214,4 +215,10 @@ class Func:
 
     def __get__(self, instance, owner):
         return partial(self, instance)
+
+    @classmethod
+    def create(self, func, client, filename):
+        if getattr(func, "__used__", False):
+            return func
+        return self(func, client, filename)
 

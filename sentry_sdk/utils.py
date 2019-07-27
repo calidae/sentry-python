@@ -264,7 +264,7 @@ def get_lines_from_file(
 
     if source is None:
         try:
-            print(linecache.cache.keys())
+            # print(linecache.cache.keys())
             source = linecache.getlines(filename)
         except (OSError, IOError):
             return [], None, []
